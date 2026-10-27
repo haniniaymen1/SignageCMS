@@ -1,0 +1,301 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ UTILISATEURS ============
+
+model User {
+  id              String    @id @default(cuid())
+  username        String    @unique
+  email           String    @unique
+  name            String
+  password        String    @default("")
+  role            String    @default("user") // admin | user | read-only
+  status          String    @default("active") // active | disabled
+  authProvider    String    @default("local") // local | ldap
+  ldapDn          String?   // distinguished name LDAP (identification fiable à la synchronisation)
+  userGroupId     String?
+  userGroup       UserGroup? @relation(fields: [userGroupId], references: [id])
+  tokenValidAfter DateTime? // jetons émis avant cette date sont révoqués (logout / changement mdp)
+  lastLogin       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([ldapDn])
+}
+
+// ============ LDAP ============
+
+// Configuration LDAP unique (singleton id="default")
+model LdapConfig {
+  id            String    @id @default("default")
+  enabled       Boolean   @default(false) // authentification LDAP à la connexion
+  url           String    @default("") // ldap://hote:389 ou ldaps://hote:636
+  bindDn        String    @default("") // compte technique (ex : cn=admin,dc=societe,dc=local)
+  bindPassword  String    @default("") // jamais renvoyé au client
+  baseDn        String    @default("") // ex : dc=societe,dc=local
+  userOu        String    @default("") // OU spécifique d'import (DN complet)
+  userFilter    String    @default("(objectClass=person)")
+  usernameAttr  String    @default("uid") // uid (OpenLDAP) | sAMAccountName (Active Directory)
+  emailAttr     String    @default("mail")
+  nameAttr      String    @default("cn")
+  defaultRole   String    @default("user") // rôle attribué aux comptes importés
+  groupId       String?   // groupe CMS optionnel attribué aux comptes importés
+  disableMissing Boolean  @default(false) // désactiver les comptes LDAP absents de l'OU à la synchronisation
+  lastSyncAt    DateTime?
+  lastSyncResult String?  // ex : "3 créés, 2 mis à jour, 1 désactivé"
+  lastError     String?
+  updatedAt     DateTime  @updatedAt
+}
+
+model UserGroup {
+  id       String @id @default(cuid())
+  name     String @unique
+  users    User[]
+}
+
+// ============ ECRANS (DISPLAYS) ============
+
+model Display {
+  id          String    @id @default(cuid())
+  hardwareKey String    @unique
+  name        String
+  description String?
+  status      String    @default("offline") // online | offline | error
+  groupId     String?
+  group       DisplayGroup? @relation(fields: [groupId], references: [id])
+  resolution  String    @default("1920x1080")
+  layoutId    String?
+  lastAccess  DateTime?
+  storageUsed Int       @default(0) // Mo
+  latitude    Float     @default(0)
+  longitude   Float     @default(0)
+  incognito   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model DisplayGroup {
+  id       String    @id @default(cuid())
+  name     String
+  displays Display[]
+  events   ScheduleEvent[]
+}
+
+// ============ MEDIAS ============
+
+model Media {
+  id        String   @id @default(cuid())
+  name      String
+  type      String   // image | video | pdf | audio | dataset
+  fileName  String
+  fileSize  Int      @default(0) // octets
+  url       String   @default("")
+  duration  Int      @default(0) // secondes
+  slides    Json?    // URLs publiques des slides converties (présentations / PDF)
+  tags      String?
+  expires   DateTime?
+  widgets   Widget[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============ PRESENTATIONS (LAYOUTS) ============
+
+model Layout {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  width       Int      @default(1920)
+  height      Int      @default(1080)
+  duration    Int      @default(60)
+  background  String   @default("#0f172a")
+  backgroundColor String @default("#0f172a")
+  backgroundImage String?
+  status      String   @default("brouillon") // brouillon | publie
+  regions     Region[]
+  campaigns   CampaignLayout[]
+  events      ScheduleEvent[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Region {
+  id       String  @id @default(cuid())
+  layoutId String
+  layout   Layout  @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  name     String  @default("Région")
+  left     Int     @default(0)  // en % du canvas
+  top      Int     @default(0)
+  width    Int     @default(50)
+  height   Int     @default(50)
+  zIndex   Int     @default(1)
+  widgets  Widget[]
+}
+
+model Widget {
+  id        String   @id @default(cuid())
+  regionId  String?
+  region    Region?  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  playlistId String?
+  playlist  Playlist? @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  type      String   // text | image | video | clock | weather | rss | webpage
+  name      String   @default("Widget")
+  duration  Int      @default(10) // secondes
+  mediaId   String?
+  media     Media?   @relation(fields: [mediaId], references: [id])
+  config    String   @default("{}") // JSON de configuration
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============ PLAYLISTS ============
+
+model Playlist {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  duration    Int      @default(0)
+  widgets     Widget[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============ CAMPAGNES ============
+
+model Campaign {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  layouts     CampaignLayout[]
+  events      ScheduleEvent[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model CampaignLayout {
+  id         String @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  layoutId   String
+  layout     Layout   @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  displayOrder Int    @default(1)
+}
+
+// ============ PLANIFICATION ============
+
+model ScheduleEvent {
+  id            String  @id @default(cuid())
+  name          String
+  type          String  @default("layout") // layout | campaign
+  layoutId      String?
+  layout        Layout? @relation(fields: [layoutId], references: [id])
+  campaignId    String?
+  campaign      Campaign? @relation(fields: [campaignId], references: [id])
+  displayGroupId String?
+  displayGroup  DisplayGroup? @relation(fields: [displayGroupId], references: [id])
+  targetType    String  @default("all") // all | group | displays — mode de ciblage
+  displayIds    String? // JSON array des IDs d'écrans ciblés (targetType = displays)
+  start         DateTime
+  end           DateTime
+  displayOrder  Int     @default(0)
+  isPriority    Boolean @default(false)
+  loop          Boolean @default(true) // §16 — boucle ON/OFF par événement (remplace le switch global playerLoop)
+  color         String  @default("#f97316")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============ RAPPORTS / JOURNAL ============
+
+model LogEntry {
+  id        String   @id @default(cuid())
+  level     String   @default("info") // info | avertissement | erreur
+  display   String?
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model ProofOfPlay {
+  id        String   @id @default(cuid())
+  display   String
+  media     String
+  layout    String?
+  count     Int      @default(1)
+  duration  Int      @default(0)
+  date      DateTime @default(now())
+}
+
+// ============ IPTV ============
+
+model IptvProvider {
+  id                String    @id @default(cuid())
+  name              String
+  host              String // ex : http://richtv323.xyz:2095
+  username          String
+  password          String
+  status            String    @default("pending") // connected | error | expired
+  expiry            DateTime?
+  maxConnections    Int       @default(0)
+  activeConnections Int       @default(0)
+  isTrial           Boolean   @default(false)
+  timezone          String?
+  allowedFormats    String? // ex : m3u8,ts
+  rawInfo           String? // JSON brut user_info + server_info
+  lastError         String?
+  lastSyncAt        DateTime?
+  liveCount         Int       @default(0)
+  vodCount          Int       @default(0)
+  seriesCount       Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model IptvPlaylist {
+  id           String        @id @default(cuid())
+  name         String
+  sourceType   String        @default("url") // url | file | paste
+  url          String?
+  channelCount Int           @default(0)
+  status       String        @default("pending") // pending | ok | error
+  error        String?
+  channels     IptvChannel[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model IptvChannel {
+  id           String       @id @default(cuid())
+  playlistId   String?
+  playlist     IptvPlaylist? @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  providerId   String? // compte Xtream d'origine (portail) — multi-comptes
+  name         String
+  url          String
+  logo         String?
+  group        String?
+  tvgId        String?
+  language     String?
+  kind         String       @default("playlist") // playlist | live | vod | series
+  streamId     String? // identifiant Xtream (stream / série)
+  containerExt String?
+  createdAt    DateTime     @default(now())
+
+  @@index([playlistId])
+  @@index([providerId])
+  @@index([group])
+  @@index([kind])
+}
+
+// ============ PARAMETRES ============
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}

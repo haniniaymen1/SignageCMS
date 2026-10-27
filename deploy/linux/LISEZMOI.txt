@@ -1,0 +1,88 @@
+SignageCMS — Scripts Linux
+==========================
+
+CONTENU DU DOSSIER
+------------------
+  install.sh        Installation COMPLÈTE du serveur CMS (recommandé) :
+                    utilitaires + Node.js 20 LTS + LibreOffice + Poppler +
+                    déploiement /opt/signagecms + .env + npm/Prisma/build +
+                    service systemd + pare-feu + vérification finale.
+  start.sh          Lancement du serveur (premier plan, --daemon, --stop,
+                    --restart, --status).
+  install-tools.sh  Uniquement LibreOffice + Poppler (multi-distributions).
+  LISEZMOI.txt      Ce fichier.
+
+INSTALLATION COMPLÈTE EN UNE COMMANDE (recommandé)
+--------------------------------------------------
+  sudo bash deploy/linux/install.sh --zip /chemin/SignageCMS-Serveur-v3.11.12.zip
+
+  Sans --zip, le script recherche l'archive SignageCMS-Serveur-*.zip à côté
+  de lui et à l'emplacement courant. Si une installation existe déjà dans
+  /opt/signagecms, l'archive est optionnelle (ré-extraction écrasante si
+  fournie). Options utiles :
+
+    --port 8080        port d'écoute du CMS (défaut 3000)
+    --dir /opt/moncms  dossier d'installation (défaut /opt/signagecms)
+    --no-service       ne crée pas le service systemd
+    --no-firewall      ne modifie pas le pare-feu
+
+  Le script est idempotent : réexécutable sans risque.
+
+LANCER LE SERVEUR
+-----------------
+  bash deploy/linux/start.sh              # premier plan (Ctrl+C)
+  bash deploy/linux/start.sh --daemon     # arrière-plan (service.log)
+  bash deploy/linux/start.sh --status     # état + version API
+  bash deploy/linux/start.sh --restart    # redémarre
+  bash deploy/linux/start.sh --stop       # arrête
+
+  Si le service systemd a été créé par install.sh, préférez :
+  sudo systemctl status|restart|stop signagecms
+
+AU PREMIER DÉMARRAGE
+--------------------
+  Le compte admin est créé automatiquement ; son mot de passe aléatoire est
+  écrit dans db/admin-credentials.txt (à supprimer après la 1re connexion)
+  et affiché dans la console.
+
+OUTILS DE CONVERSION SEULS (LibreOffice + Poppler)
+--------------------------------------------------
+
+Pour afficher les PowerPoint (PPT/PPTX/PPS/PPSX/ODP) et les PDF sur les
+écrans, le serveur CMS a besoin de DEUX outils installés une seule fois :
+
+  - LibreOffice : PPT -> PDF     (soffice --headless)
+  - Poppler     : PDF -> PNG par diapositive (pdftoppm)
+
+INSTALLATION AUTOMATIQUE
+------------------------
+  sudo bash deploy/linux/install-tools.sh
+
+Le script détecte votre distribution (Ubuntu/Debian, RHEL/Fedora, openSUSE,
+Arch, Alpine), installe les paquets officiels, puis vérifie le résultat.
+Il est idempotent : le relancer ne réinstalle rien.
+
+CAS PARTICULIERS
+----------------
+  - Pas de sudo ?
+      bash deploy/linux/install-tools.sh --no-sudo
+    → télécharge l'archive officielle LibreOffice (documentfoundation.org)
+      et l'installe dans $HOME ; ajoutez alors dans le fichier .env du CMS :
+      SOFFICE_PATH=/home/<user>/.local/bin/soffice
+      (Poppler reste à faire installer par l'administrateur : poppler-utils)
+
+  - Déjà installé ailleurs (chemin non standard) ?
+      Déclarez-le dans .env :
+      SOFFICE_PATH=/chemin/vers/soffice
+      PDFTOPPM_PATH=/chemin/vers/pdftoppm
+
+VÉRIFICATION
+------------
+  soffice --version && pdftoppm -v
+
+Le CMS affiche aussi l'état de ces outils dans la bibliothèque de médias
+(badge « Non converti » + bouton « Reconvertir ») et au démarrage du serveur
+(avertissement console si absent).
+
+Après installation : redémarrez le CMS, puis cliquez « Reconvertir » sur les
+médias concernés — ou réimportez-les.

@@ -1,0 +1,72 @@
+============================================================
+ SignageCMS v3.11 - Installation sur Windows (guide rapide)
+============================================================
+
+PREREQUIS
+  - Windows Server 2016 ou superieur (ou Windows 10/11)
+  - Node.js 20 LTS ou 22 LTS  (https://nodejs.org)
+  - LibreOffice et Poppler : facultatifs et installes automatiquement par
+    install.bat (telechargement officiel TDF ~360 Mo + Poppler GitHub,
+    multi-sources avec reprise). Le CMS fonctionne sans eux : seuls
+    PowerPoint/PDF ne sont pas convertis.
+
+INSTALLATION AUTOMATIQUE (recommandee)
+  1. Copiez ce dossier (tout le projet) sur le serveur, ex : C:\SignageCMS
+  2. Double-cliquez deploy\windows\install.bat
+     -> verifie Node.js, cree .env, installe les dependances, prepare la base,
+        compile la version production, puis telecharge et installe
+        LibreOffice + Poppler (etape 6, conversion PPT/PDF).
+     Pour ignorer cette derniere etape : definissez SKIP_TOOLS=1 avant
+     de lancer install.bat (set SKIP_TOOLS=1).
+     Journaux : deploy\windows\install-cms.log, build-cms.log
+                et install-tools.log
+  3. Lancez deploy\windows\start-cms.bat  ->  http://localhost:3000
+  4. Reseau : deploy\windows\firewall.ps1  (ouvre le port 3000, en administrateur)
+  5. Auto-demarrage : deploy\windows\install-service.ps1  (en administrateur)
+
+PREMIERE CONNEXION
+  Utilisateur : admin
+  Mot de passe initial : affiche dans la console du serveur au premier lancement
+  et enregistre dans db\admin-credentials.txt
+  -> Changez-le des la premiere connexion (menu Utilisateurs)
+     puis supprimez le fichier admin-credentials.txt.
+
+ORDRE D'EXECUTION DES SCRIPTS (resume)
+  install.bat -> start-cms.bat -> firewall.ps1 -> install-service.ps1
+  build.bat   = recompile le CMS apres une mise a jour du code (inutile au 1er lancement :
+                install.bat l'appelle deja)
+  dev.bat     = mode developpement uniquement (rechargement a chaud, ne pas utiliser en production)
+  Les scripts acceptent un chemin d'installation contenant des espaces.
+
+INSTALLATION MANUELLE (si les scripts sont bloques par la strategie)
+  powershell -ExecutionPolicy Bypass -File deploy\windows\install.ps1   (prerequis)
+  puis build.bat, ou a la main depuis la racine du projet :
+    npm install
+    npx prisma db push
+    npx prisma generate
+    npm run build
+    node .next\standalone\server.js
+
+ACCES
+  - Interface d'administration : http://localhost:3000/
+  - Lecteur pour ecrans/TBBox  : http://localhost:3000/player
+  - API lecteur Android (APK)  : meme adresse + cle d'ecran affichee dans le CMS
+
+DESINSTALLATION DU SERVICE
+  nssm remove SignageCMS confirm     (ou : schtasks /Delete /TN SignageCMS /F)
+
+DEPANNAGE
+  - "port deja utilise"    : lancez start-cms.bat avec un autre port (ex : set PORT=8080)
+  - conversion PPT absente : installez LibreOffice puis relancez start-cms.bat
+  - conversion PDF absente : extrayez Poppler dans C:\poppler
+  - verifier le service    : fichier service.log a la racine du projet
+  - mot de passe admin perdu : supprimez le compte admin de la base (ou la base)
+    puis relancez start-cms.bat : un nouveau mot de passe aleatoire est genere
+    (console + db\admin-credentials.txt)
+
+SECURITE (v3.11)
+  - Le mot de passe admin par défaut n'existe plus : il est genere aleatoirement.
+  - Protection anti-SSRF sur les proxys de pages web et IPTV.
+  - Limiteur de tentatives sur la page de connexion.
+  - En-tetes de securite et durcissement des fichiers televerses.
+  - Detail complet : AUDIT-SECURITE.md a la racine du projet.
